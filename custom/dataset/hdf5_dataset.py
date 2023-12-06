@@ -10,14 +10,13 @@ import torch.utils.data as data
 
 class HDF5DataSet(data.Dataset):
     """A dataset that read data from hdf5 file."""
-    def __init__(self, dataset_path:str, transform:Optional[Callable] = None, **kwargs):
+    def __init__(self, dataset_path:str, **kwargs):
         """initialize the dataset
             dataset_path: the file path of the dataset file.
             transform: the transform function before input the data to the model.
         """
         super(HDF5DataSet, self).__init__()
         self.dataset_path = dataset_path
-        self.transform = transform
 
         # load dataset meta data
         self.meta_dict = {}
@@ -37,9 +36,6 @@ class HDF5DataSet(data.Dataset):
             self.__lazy_load()
         # get data
         input, *other = self.filedata[idx]  # type:ignore
-        # transform input if needed
-        if self.transform is not None:
-            input, *other = self.transform(input, *other)
         return input, *other
 
 

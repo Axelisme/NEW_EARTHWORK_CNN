@@ -1,12 +1,11 @@
 architectures: &Arch
   model:
-    select: 'TemplateModel'
-    TemplateModel:
-      module: 'custom.model.template'
+    select: 'ResidualOnly'
+    ResidualOnly:
+      module: 'custom.model.residual_cnn'
       args:
-        input_size: 128
-        num_classes: &N 8
         hidden_size: 256
+        output_size: &N 8
 
   optimizer:
     select: 'AdamW'
@@ -17,11 +16,15 @@ architectures: &Arch
     Adam: *AdamW_args
 
   scheduler:
-    select: 'ExponentialLR'
+    select: 'ConstantLR'
     ExponentialLR:
       module: 'torch.optim.lr_scheduler'
       args:
         gamma: 0.9995
+    ConstantLR:
+      module: 'torch.optim.lr_scheduler'
+      args:
+        total_iters: 0
 
   loss:
     select: 'CrossEntropyLoss'
@@ -43,24 +46,24 @@ architectures: &Arch
 data:
   train_loader:
     dataset:
-      select: 'HDF5DataSet'
-      HDF5DataSet:
-        module: 'custom.dataset.hdf5_dataset'
+      select: 'ImageCsvDataset'
+      ImageCsvDataset:
+        module: 'custom.dataset.image_dataset'
         args:
-          dataset_path: './data/processed/template/train.h5'
+          dataset_path: './data/processed/20231205/2023-07/split-train.csv'
     args:
-      batch_size: 32
+      batch_size: 64
       shuffle: True
       pin_memory: True
       num_workers: 0
 
   valid_loader:
     dataset:
-      select: 'HDF5DataSet'
-      HDF5DataSet:
-        module: 'custom.dataset.hdf5_dataset'
+      select: 'ImageCsvDataset'
+      ImageCsvDataset:
+        module: 'custom.dataset.image_dataset'
         args:
-          dataset_path: './data/processed/template/valid.h5'
+          dataset_path: './data/processed/20231205/2023-07/split-valid.csv'
     args:
       batch_size: 1
       shuffle: False
@@ -69,12 +72,13 @@ data:
 
 
 runner:
-  total_steps: 1000
+  step_mod: 'grad'
+  total_steps: 10000
   log_freq: 100
-  dev_freq: 500
+  dev_freq: 1000
   save_freq: 500
   init_args:
-    gradient_accumulation_steps: 16
+    gradient_accumulation_steps: 1
 
 
 ckpt:
