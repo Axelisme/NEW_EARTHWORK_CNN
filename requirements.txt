@@ -1,0 +1,10 @@
+torch>=2.0.0
+torchvision
+torchaudio
+torchmetrics
+tqdm
+wandb
+numpy
+pyyaml
+h5py
+matplotlib

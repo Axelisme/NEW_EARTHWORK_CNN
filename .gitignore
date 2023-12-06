@@ -1,0 +1,12 @@
+.vscode
+
+test.py
+test.ipynb
+
+data
+!data/**/.gitkeep
+
+__pycache__/
+*.pyc
+
+wandb

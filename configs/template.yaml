@@ -1,0 +1,141 @@
+architectures: &Arch
+  model:
+    select: 'TemplateModel'
+    TemplateModel:
+      module: 'custom.model.template'
+      args:
+        input_size: 128
+        num_classes: &N 8
+        hidden_size: 256
+
+  optimizer:
+    select: 'AdamW'
+    AdamW: &AdamW_args
+      module: 'torch.optim'
+      args:
+        lr: 0.0003
+    Adam: *AdamW_args
+
+  scheduler:
+    select: 'ExponentialLR'
+    ExponentialLR:
+      module: 'torch.optim.lr_scheduler'
+      args:
+        gamma: 0.9995
+
+  loss:
+    select: 'CrossEntropyLoss'
+    CrossEntropyLoss:
+      module: 'torch.nn'
+      args: {}
+
+  metric:
+    select:
+      - 'MulticlassAccuracy'
+    use_loss: True
+    MulticlassAccuracy:
+      module: 'torchmetrics.classification'
+      args:
+        num_classes: *N
+        average: 'macro'
+
+
+data:
+  train_loader:
+    dataset:
+      select: 'HDF5DataSet'
+      HDF5DataSet:
+        module: 'custom.dataset.hdf5_dataset'
+        args:
+          dataset_path: './data/processed/template/train.h5'
+    args:
+      batch_size: 32
+      shuffle: True
+      pin_memory: True
+      num_workers: 0
+
+  valid_loader:
+    dataset:
+      select: 'HDF5DataSet'
+      HDF5DataSet:
+        module: 'custom.dataset.hdf5_dataset'
+        args:
+          dataset_path: './data/processed/template/valid.h5'
+    args:
+      batch_size: 1
+      shuffle: False
+      pin_memory: True
+      num_workers: 0
+
+
+runner:
+  total_steps: 1000
+  log_freq: 100
+  dev_freq: 500
+  save_freq: 500
+  init_args:
+    gradient_accumulation_steps: 16
+
+
+ckpt:
+  save_mod : 'max'
+  check_metrics:
+    - 'MulticlassAccuracy'
+  ckpt_dir: ~  # default: './data/saved_models/{name}'
+  keep_num: 3
+
+
+WandB:
+  project: &P 'Template_project'
+  init_args:
+    name: 'Template_model'
+    config: *Arch
+  watch_args:
+    log: 'all'
+    log_freq: 1000
+  sweep:
+    num_trials: 30
+    config:
+      name: 'Template_sweep'
+      method: 'random'
+      metric:
+        name: 'Valid_loss'
+        goal: 'minimize'
+      parameters:
+        runner:
+          parameters:
+            total_steps:
+              value: 100
+            log_freq:
+              value: 50
+            dev_freq:
+              value: 50
+        architectures:
+          parameters:
+            optimizer:
+              parameters:
+                select:
+                  values:
+                    - 'AdamW'
+                    - 'Adam'
+                AdamW:
+                  parameters:
+                    args:
+                      parameters:
+                        lr:
+                          values:
+                            - 0.0001
+                            - 0.0003
+                            - 0.0005
+        data:
+          parameters:
+            train_loader:
+              parameters:
+                args:
+                  parameters:
+                    batch_size:
+                      values:
+                        - 16
+                        - 32
+                        - 64
+
