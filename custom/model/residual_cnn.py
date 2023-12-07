@@ -14,12 +14,14 @@ class ResidualOnly(nn.Module):
         # import pretrain resnet18
         self.resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
         self.resnet.fc = nn.Linear(512, hidden_size)
+        self.act = nn.GELU()
         self.project = nn.Linear(hidden_size, output_size)
 
     #@torch.compile
     def forward(self, x:Tensor) -> Tensor:
         """Forward a batch of data through the model."""
         x = self.resnet(x)
+        x = self.act(x)
         x = self.project(x)
-        return x.softmax(dim=1)
+        return x
 

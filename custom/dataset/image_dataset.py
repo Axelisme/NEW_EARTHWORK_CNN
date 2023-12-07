@@ -1,20 +1,22 @@
 
 """define a class for the dataset"""
 
-import cv2
 import csv
 
-import numpy as np
+import cv2
 import torch.utils.data as data
+import torchvision.transforms as transforms
 
+tensorer = transforms.ToTensor()
+normaler = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229,0.224,0.225])
 
 def image_loader(path:str, label_id:str, label_name:str):
     img = cv2.imread(path)
     assert img is not None, f"cannot read image from {path}"
     assert img.shape == (224, 224, 3), f"image shape is not (224, 224, 3) but {img.shape}"
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = img.transpose(2, 0, 1)
-    img = img.astype(np.float32) / 255.0
+    img = tensorer(img)
+    img = normaler(img)
     return img, int(label_id), label_name, path
 
 
@@ -41,3 +43,4 @@ class ImageCsvDataset(data.Dataset):
 
     def __len__(self):
         return len(self.filedata)
+

@@ -4,7 +4,7 @@ architectures: &Arch
     ResidualOnly:
       module: 'custom.model.residual_cnn'
       args:
-        hidden_size: 256
+        hidden_size: 1024
         output_size: &N 8
 
   optimizer:
@@ -27,10 +27,11 @@ architectures: &Arch
         total_iters: 0
 
   loss:
-    select: 'CrossEntropyLoss'
-    CrossEntropyLoss:
-      module: 'torch.nn'
-      args: {}
+    select: 'MyCrossEntropyLoss'
+    MyCrossEntropyLoss:
+      module: 'custom.loss.cross_entropy'
+      args:
+        weight: [8.9, 131.9, 36.2, 1.0, 0.0, 2.6, 13.4, 2.8]
 
   metric:
     select:
@@ -41,34 +42,57 @@ architectures: &Arch
       args:
         num_classes: *N
         average: 'macro'
+        top_k: 1
 
 
 data:
   train_loader:
-    dataset:
-      select: 'ImageCsvDataset'
-      ImageCsvDataset:
-        module: 'custom.dataset.image_dataset'
-        args:
-          dataset_path: './data/processed/20231205/2023-07/split-train.csv'
     args:
       batch_size: 64
       shuffle: True
       pin_memory: True
       num_workers: 0
-
-  valid_loader:
     dataset:
-      select: 'ImageCsvDataset'
+      select: 'MergeDataset'
       ImageCsvDataset:
         module: 'custom.dataset.image_dataset'
         args:
-          dataset_path: './data/processed/20231205/2023-07/split-valid.csv'
+          dataset_path: './data/processed/20231205/2023-06/split-train.csv'
+      MergeDataset:
+        module: 'custom.dataset.merge_dataset'
+        args:
+          module: 'custom.dataset.image_dataset'
+          name: 'ImageCsvDataset'
+          kargs_list:
+            - dataset_path: './data/processed/20231205/2023-06/split-train.csv'
+            - dataset_path: './data/processed/20231205/2023-08/split-train.csv'
+            - dataset_path: './data/processed/20231205/2023-09/split-train.csv'
+            - dataset_path: './data/processed/20231205/2023-10/split-train.csv'
+            - dataset_path: './data/processed/20231205/2023-11/split-train.csv'
+
+  valid_loader:
     args:
       batch_size: 1
       shuffle: False
       pin_memory: True
-      num_workers: 0
+      num_workers: 4
+    dataset:
+      select: 'MergeDataset'
+      ImageCsvDataset:
+        module: 'custom.dataset.image_dataset'
+        args:
+          dataset_path: './data/processed/20231205/2023-06/split-valid.csv'
+      MergeDataset:
+        module: 'custom.dataset.merge_dataset'
+        args:
+          module: 'custom.dataset.image_dataset'
+          name: 'ImageCsvDataset'
+          kargs_list:
+            - dataset_path: './data/processed/20231205/2023-06/split-valid.csv'
+            - dataset_path: './data/processed/20231205/2023-08/split-valid.csv'
+            - dataset_path: './data/processed/20231205/2023-09/split-valid.csv'
+            - dataset_path: './data/processed/20231205/2023-10/split-valid.csv'
+            - dataset_path: './data/processed/20231205/2023-11/split-valid.csv'
 
 
 runner:

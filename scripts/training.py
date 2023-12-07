@@ -170,6 +170,7 @@ def show_train_result(
     ):
     """Print result of training."""
     # print result
+    show()
     show(f'Step: ({step} / {conf["total_steps"]})')
     show(f'lr: {lr:0.3e}')
     show("Train result:")
