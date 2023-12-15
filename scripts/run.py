@@ -10,9 +10,9 @@ from torch.utils.data import DataLoader
 from torchmetrics import MetricCollection
 from tqdm.auto import tqdm
 
-from global_vars import SAVED_MODELS_DIR
+from global_vars import RESULT_DIR
 from util.io import show, show_train_result, show_valid_result
-from util.utility import init, check_better
+from util.utility import init, check_better, create_instance
 from modules.trainer import Trainer
 from modules.valider import Valider
 from modules.ckptmanager import CheckPointManager
@@ -22,30 +22,24 @@ from custom.evaluator.Loss2evaluator import LossScore
 def get_model(model_conf:Dict[str, Dict|Any]):
     model_select = model_conf['select']
     show(f"[INFO] Using {model_select} as model.")
-    model_module = importlib.import_module(model_conf[model_select]['module'])
-    return getattr(model_module, model_select)(**model_conf[model_select]['args'])
+    return create_instance(model_conf[model_select])
 
 
 def get_modules_for_train(arch_conf:Dict[str, Dict|Any], parameters):
     # select optimizer
     optim_select = arch_conf['optimizer']['select']
     show(f"[INFO] Using {optim_select} as optimizer.")
-    optim_module = importlib.import_module(arch_conf['optimizer'][optim_select]['module'])
-    optimizer = getattr(optim_module, optim_select)(
-        parameters, **arch_conf['optimizer'][optim_select]['args'])
+    optimizer = create_instance(arch_conf['optimizer'][optim_select], params=parameters)
 
     # select scheduler
     sched_select = arch_conf['scheduler']['select']
     show(f"[INFO] Using {sched_select} as scheduler.")
-    sched_module = importlib.import_module(arch_conf['scheduler'][sched_select]['module'])
-    scheduler = getattr(sched_module, sched_select)(
-        optimizer, **arch_conf['scheduler'][sched_select]['args'])
+    scheduler = create_instance(arch_conf['scheduler'][sched_select], optimizer=optimizer)
 
     # select loss function
     loss_select = arch_conf['loss']['select']
     show(f"[INFO] Using {loss_select} as loss function.")
-    criter_module = importlib.import_module(arch_conf['loss'][loss_select]['module'])
-    criterion = getattr(criter_module, loss_select)(**arch_conf['loss'][loss_select]['args'])
+    criterion = create_instance(arch_conf['loss'][loss_select])
 
     return optimizer, scheduler, criterion
 
@@ -56,8 +50,7 @@ def get_modules_for_eval(metric_conf:Dict[str, Dict|Any], criterion=None):
     for name in metric_conf['select']:
         show(f"[INFO] Using {name} as metric.")
         # use importlib to avoid weird bug of 'BinnedAveragePrecision' not found
-        metric_module = importlib.import_module(metric_conf[name]['module'])
-        metrics[name] = getattr(metric_module, name)(**metric_conf[name]['args'])
+        metrics[name] = create_instance(metric_conf[name])
     if criterion is not None:
         show(f"[INFO] Using LossScore as metric.")
         metrics['valid_loss'] = LossScore(criterion)
@@ -65,11 +58,11 @@ def get_modules_for_eval(metric_conf:Dict[str, Dict|Any], criterion=None):
     return MetricCollection(metrics)
 
 
-def get_dataset(dataset_conf, mode):
-    dataset_select = dataset_conf['select']
-    show(f"[INFO] Using {dataset_select} as {mode} dataset.")
-    dataset_module = importlib.import_module(dataset_conf[dataset_select]['module'])
-    return getattr(dataset_module, dataset_select)(**dataset_conf[dataset_select]['args'])
+def get_dataloader(datasets_conf:Dict, loader_conf:Dict, mode:str):
+    dataset = loader_conf['dataset']
+    show(f"[INFO] Using {dataset} as {mode} dataset.")
+    dataset = create_instance(datasets_conf[dataset])
+    return DataLoader(dataset, **loader_conf['kwargs'])
 
 
 def start_train(args: Namespace, conf: Dict[str, Dict|Any]):
@@ -87,7 +80,7 @@ def start_train(args: Namespace, conf: Dict[str, Dict|Any]):
     if args.load or not args.disable_save:
         ckpt_conf = conf['ckpt']
         if ckpt_conf['ckpt_dir'] is None:
-            ckpt_conf['ckpt_dir'] = os.path.join(SAVED_MODELS_DIR, args.name)
+            ckpt_conf['ckpt_dir'] = os.path.join(RESULT_DIR, args.name)
         ckpt_manager = CheckPointManager(**ckpt_conf)
         show(f"[INFO] Checkpoint directory: {ckpt_manager.ckpt_dir}")
         save_conf = {'args': vars(args), 'conf': conf}
@@ -101,14 +94,13 @@ def start_train(args: Namespace, conf: Dict[str, Dict|Any]):
 
     # register model to wandb if needed
     if args.WandB and not args.not_track_params:
-        wandb.watch(models=model, criterion=criterion, **conf['WandB']['watch_args'])
+        wandb.watch(models=model, criterion=criterion, **conf['WandB']['watch_kwargs'])
 
     # prepare dataset and dataloader
-    data_conf = conf['data']
-    train_dataset = get_dataset(data_conf['train_loader']['dataset'], 'train')
-    valid_dataset = get_dataset(data_conf['valid_loader']['dataset'], 'valid')
-    train_loader = DataLoader(train_dataset, **data_conf['train_loader']['args'])
-    valid_loader = DataLoader(valid_dataset, **data_conf['valid_loader']['args'])
+    datasets_conf = conf['data']['datasets']
+    loader_conf = conf['data']['dataloaders']
+    train_loader = get_dataloader(datasets_conf, loader_conf[args.train_loader], 'train')
+    valid_loader = get_dataloader(datasets_conf, loader_conf[args.valid_loader], 'valid')
 
     # create trainer and valider
     runner_conf = conf['runner']
@@ -119,14 +111,14 @@ def start_train(args: Namespace, conf: Dict[str, Dict|Any]):
         scheduler=scheduler,
         criterion=criterion,
         args=args,
-        **runner_conf['trainer_args']
+        **runner_conf['trainer_kwargs']
     )
     valider = Valider(
         model=model,
         valid_loader=valid_loader,
         metrics=metrics,
         args=args,
-        **runner_conf['valider_args']
+        **runner_conf['valider_kwargs']
     )
 
     # start training
@@ -174,6 +166,9 @@ def start_train(args: Namespace, conf: Dict[str, Dict|Any]):
             wandb.log({'lr':trainer.lr}, step=step, commit=True)
     pbar.close()
 
+    trainer.close()
+    valider.close()
+
 
 def start_evaluate(args: Namespace, conf: Dict[str, Dict|Any]):
     """Valid model base on given config."""
@@ -185,15 +180,14 @@ def start_evaluate(args: Namespace, conf: Dict[str, Dict|Any]):
     # load model and optimizer from checkpoint if needed
     ckpt_conf = conf['ckpt']
     if ckpt_conf['ckpt_dir'] is None:
-        ckpt_conf['ckpt_dir'] = os.path.join(SAVED_MODELS_DIR, args.name)
+        ckpt_conf['ckpt_dir'] = os.path.join(RESULT_DIR, args.name)
     ckpt_manager = CheckPointManager(**ckpt_conf)
     show(f"[INFO] Checkpoint directory: {ckpt_manager.ckpt_dir}")
     ckpt_manager.load_model(model, ckpt_path=args.load)
 
     # prepare dataset and dataloader
-    data_conf = conf['data']
-    valid_dataset = get_dataset(data_conf['valid_loader']['dataset'], 'valid')
-    valid_loader = DataLoader(valid_dataset, **data_conf['valid_loader']['args'])
+    loader_conf = conf['data']['dataloaders']
+    valid_loader = get_dataloader(conf['data']['datasets'], loader_conf[args.valid_loader], 'valid')
 
     # create valider
     runner_conf = conf['runner']
@@ -202,13 +196,15 @@ def start_evaluate(args: Namespace, conf: Dict[str, Dict|Any]):
         valid_loader=valid_loader,
         metrics=metrics,
         args=args,
-        **runner_conf['valider_args']
+        **runner_conf['valider_kwargs']
     )
 
     # start validating
     valider.one_epoch()
     current_result = valider.pop_result()
     show_valid_result(runner_conf, 0, current_result)
+
+    valider.close()
 
 
 def main():
@@ -219,6 +215,8 @@ def main():
     parser.add_argument('-m', '--mode', type=str, choices=['train', 'evaluate'], required=True, help='mode of this training')
     parser.add_argument('-c', '--config', type=str, default='configs/template.yaml', help='path to config file')
     parser.add_argument('-s', '--seed', type=int, default=0, help='random seed')
+    parser.add_argument('--train_loader', type=str, default='train_loader', help='train loader name')
+    parser.add_argument('--valid_loader', type=str, default='valid_loader', help='valid loader name')
     parser.add_argument('--load', default=None, help='path to checkpoint file')
     parser.add_argument('--device', type=str, default='cuda:0', help='device to use')
     parser.add_argument('--slient', action='store_true', help='slient or not')
@@ -242,7 +240,11 @@ def main():
     if args.mode == 'train':
         if args.WandB:
             show(f'[INFO] Using W&B to log.')
-            wandb.init(project=conf['WandB']['project'], **conf['WandB']['init_args'])
+            wandb.init(
+                project=conf['WandB']['project'],
+                name=args.name,
+                **conf['WandB']['init_kwargs']
+            )
 
         start_train(args, conf)
     elif args.mode == 'evaluate':

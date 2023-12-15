@@ -2,97 +2,141 @@ architectures: &Arch
   model:
     select: 'ResidualOnly'
     ResidualOnly:
+      name: 'ResidualOnly'
       module: 'custom.model.residual_cnn'
-      args:
+      kwargs:
         hidden_size: 1024
         output_size: &N 8
 
   optimizer:
     select: 'AdamW'
-    AdamW: &AdamW_args
+    AdamW:
+      name: 'AdamW'
       module: 'torch.optim'
-      args:
-        lr: 0.0003
-    Adam: *AdamW_args
+      kwargs:
+        lr: 0.0001
+        amsgrad: True
 
   scheduler:
-    select: 'ConstantLR'
-    ExponentialLR:
+    select: 'CyclicLR'
+    CyclicLR: &CyclicalLR_args
+      name: 'CyclicLR'
       module: 'torch.optim.lr_scheduler'
-      args:
-        gamma: 0.9995
-    ConstantLR:
+      kwargs:
+        base_lr: 0.0001
+        max_lr: 0.002
+        step_size_up: 1000
+        step_size_down: 9000
+        mode: 'triangular2'
+        cycle_momentum: False
+    LinearLR1: &LinearLR1_args
+      name: 'LinearLR'
       module: 'torch.optim.lr_scheduler'
-      args:
-        total_iters: 0
+      kwargs:
+        total_iters: 10000
+    LinearLR2: &LinearLR2_args
+      name: 'LinearLR'
+      module: 'torch.optim.lr_scheduler'
+      kwargs:
+        total_iters: 90000
+    MySequentialLR:
+      name: 'MySequentialLR'
+      module: 'custom.scheduler.sequential_lr'
+      kwargs:
+        schedulers:
+          - *LinearLR1_args
+          - *LinearLR2_args
 
   loss:
     select: 'MyCrossEntropyLoss'
     MyCrossEntropyLoss:
+      name: 'MyCrossEntropyLoss'
       module: 'custom.loss.cross_entropy'
-      args:
-        weight: [8.9, 131.9, 36.2, 1.0, 0.0, 2.6, 13.4, 2.8]
+      kwargs:
+        weight: [0.25, 0.61, 0.38, 0.017, 6.5, 0.044, 0.13, 0.061]
 
   metric:
     select:
       - 'MulticlassAccuracy'
     use_loss: True
     MulticlassAccuracy:
+      name: 'MulticlassAccuracy'
       module: 'torchmetrics.classification'
-      args:
+      kwargs:
         num_classes: *N
         average: 'macro'
         top_k: 1
 
 
 data:
-  train_loader:
-    args:
-      batch_size: 64
-      shuffle: True
-      pin_memory: True
-      num_workers: 0
-    dataset:
-      select: 'MergeDataset'
-      ImageCsvDataset:
-        module: 'custom.dataset.image_dataset'
-        args:
-          dataset_path: './data/processed/20231205/2023-06/split-train.csv'
-      MergeDataset:
-        module: 'custom.dataset.merge_dataset'
-        args:
-          module: 'custom.dataset.image_dataset'
-          name: 'ImageCsvDataset'
-          kargs_list:
-            - dataset_path: './data/processed/20231205/2023-06/split-train.csv'
-            - dataset_path: './data/processed/20231205/2023-08/split-train.csv'
-            - dataset_path: './data/processed/20231205/2023-09/split-train.csv'
-            - dataset_path: './data/processed/20231205/2023-10/split-train.csv'
-            - dataset_path: './data/processed/20231205/2023-11/split-train.csv'
+  dataloaders:
+    train_loader:
+      kwargs:
+        batch_size: 256
+        shuffle: True
+        pin_memory: True
+        num_workers: 4
+      dataset: 'trainDataset2201_2306'
+    valid_loader:
+      kwargs:
+        batch_size: 1
+        shuffle: False
+        pin_memory: True
+        num_workers: 4
+      dataset: 'validDataset2201_2306'
 
-  valid_loader:
-    args:
-      batch_size: 1
-      shuffle: False
-      pin_memory: True
-      num_workers: 4
-    dataset:
-      select: 'MergeDataset'
-      ImageCsvDataset:
+  datasets:
+    trainDataset2201_2306:
+      name: 'MergeDataset'
+      module: 'custom.dataset.merge_dataset'
+      kwargs:
         module: 'custom.dataset.image_dataset'
-        args:
-          dataset_path: './data/processed/20231205/2023-06/split-valid.csv'
-      MergeDataset:
-        module: 'custom.dataset.merge_dataset'
-        args:
-          module: 'custom.dataset.image_dataset'
-          name: 'ImageCsvDataset'
-          kargs_list:
-            - dataset_path: './data/processed/20231205/2023-06/split-valid.csv'
-            - dataset_path: './data/processed/20231205/2023-08/split-valid.csv'
-            - dataset_path: './data/processed/20231205/2023-09/split-valid.csv'
-            - dataset_path: './data/processed/20231205/2023-10/split-valid.csv'
-            - dataset_path: './data/processed/20231205/2023-11/split-valid.csv'
+        name: 'ImageCsvDataset'
+        kwargs_list:
+          - dataset_path: './data/processed/20231205/2022-01/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-02/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-03/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-04/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-05/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-06/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-07/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-08/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-09/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-10/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-11/split-train.csv'
+          - dataset_path: './data/processed/20231205/2022-12/split-train.csv'
+          - dataset_path: './data/processed/20231205/2023-01/split-train.csv'
+          - dataset_path: './data/processed/20231205/2023-02/split-train.csv'
+          - dataset_path: './data/processed/20231205/2023-03/split-train.csv'
+          - dataset_path: './data/processed/20231205/2023-04/split-train.csv'
+          - dataset_path: './data/processed/20231205/2023-05/split-train.csv'
+          - dataset_path: './data/processed/20231205/2023-06/split-train.csv'
+
+    validDataset2201_2306:
+      name: 'MergeDataset'
+      module: 'custom.dataset.merge_dataset'
+      kwargs:
+        module: 'custom.dataset.image_dataset'
+        name: 'ImageCsvDataset'
+        kwargs_list:
+          - {dataset_path: './data/processed/20231205/2022-01/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-02/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-03/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-04/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-05/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-06/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-07/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-08/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-09/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-10/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-11/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2022-12/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2023-01/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2023-02/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2023-03/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2023-04/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2023-05/split-valid.csv', apply_augment: False}
+          - {dataset_path: './data/processed/20231205/2023-06/split-valid.csv', apply_augment: False}
 
 
 runner:
@@ -101,70 +145,24 @@ runner:
   log_freq: 100
   dev_freq: 1000
   save_freq: 500
-  trainer_args:
+  trainer_kwargs:
     gradient_accumulation_steps: 1
-  valider_args: {}
+  valider_kwargs: {}
 
 
 ckpt:
   save_mod : 'max'
   check_metrics:
     - 'MulticlassAccuracy'
-  ckpt_dir: ~  # default: './data/saved_models/{name}'
+  ckpt_dir: ~  # default: './results/{name}'
   keep_num: 3
 
 
 WandB:
-  project: &P 'Template_project'
-  init_args:
-    name: 'Template_model'
+  project: &P 'NewEarthWork'
+  init_kwargs:
     config: *Arch
-  watch_args:
+  watch_kwargs:
     log: 'all'
     log_freq: 1000
-  sweep:
-    num_trials: 30
-    config:
-      name: 'Template_sweep'
-      method: 'random'
-      metric:
-        name: 'Valid_loss'
-        goal: 'minimize'
-      parameters:
-        runner:
-          parameters:
-            total_steps:
-              value: 100
-            log_freq:
-              value: 50
-            dev_freq:
-              value: 50
-        architectures:
-          parameters:
-            optimizer:
-              parameters:
-                select:
-                  values:
-                    - 'AdamW'
-                    - 'Adam'
-                AdamW:
-                  parameters:
-                    args:
-                      parameters:
-                        lr:
-                          values:
-                            - 0.0001
-                            - 0.0003
-                            - 0.0005
-        data:
-          parameters:
-            train_loader:
-              parameters:
-                args:
-                  parameters:
-                    batch_size:
-                      values:
-                        - 16
-                        - 32
-                        - 64
 

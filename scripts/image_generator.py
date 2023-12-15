@@ -37,15 +37,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_name", type=str, required=True)
 
+    # parse the arguments
     args = parser.parse_args()
-    dataset_name = args.dataset_name
-    raw_data_root = os.path.join(RAW_DATA_DIR, dataset_name)
 
     # clear the target folder
-    target_dir = os.path.join(PROC_DATA_DIR, dataset_name)
+    target_dir = os.path.join(PROC_DATA_DIR, args.dataset_name)
     clear_folder(target_dir)
 
     # generate data
+    raw_data_root = os.path.join(RAW_DATA_DIR, args.dataset_name)
     apply_to_all_files(raw_data_root, target_dir, transform_image, postfix=postfix)
 
     # split data by different csv files
@@ -58,6 +58,19 @@ def main():
             writer = csv.writer(f)
             writer.writerow(["path", "label_id", "label_name"])
             writer.writerows(data)
+
+    # statistics
+    total_num = len(path_labels)
+    label_num = {label: 0 for label in labels}
+    for _, _, label_name in path_labels:
+        label_num[label_name] += 1
+    overall_file = os.path.join(target_dir, "overall.csv")
+    with open(overall_file, "x") as f:
+        writer = csv.writer(f)
+        writer.writerow(["label_name", "label_id", "num", "ratio"])
+        writer.writerow(["total", -1, total_num, 1])
+        for label in labels:
+            writer.writerow([label, label_dict[label], label_num[label], label_num[label] / total_num])
 
 
 if __name__ == "__main__":
